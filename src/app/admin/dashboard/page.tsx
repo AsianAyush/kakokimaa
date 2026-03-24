@@ -13,10 +13,10 @@ interface Ticket {
   users: { name: string; email: string } | null;
 }
 
-interface Stats { total: number; pending: number; in_progress: number; completed: number; }
+interface Stats { total: number; pending: number; in_progress: number; completed: number; cancelled?: number; }
 
 function StatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = { pending: '🟡 Pending', in_progress: '🔵 In Progress', completed: '✅ Completed' };
+  const map: Record<string, string> = { pending: '🟡 Pending', in_progress: '🔵 In Progress', completed: '✅ Completed', cancelled: '🚫 Cancelled' };
   return <span className={`badge badge-${status}`}>{map[status] || status}</span>;
 }
 
@@ -90,7 +90,7 @@ export default function AdminDashboardPage() {
         <div className="card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
             <div className="filter-tabs">
-              {['all', 'pending', 'in_progress', 'completed'].map(f => (
+              {['all', 'pending', 'in_progress', 'completed', 'cancelled'].map(f => (
                 <button key={f} className={`filter-tab ${filter === f ? 'active' : ''}`} onClick={() => setFilter(f)}>
                   {f === 'all' ? 'All Orders' : f === 'in_progress' ? 'In Progress' : f.charAt(0).toUpperCase() + f.slice(1)}
                 </button>

@@ -101,6 +101,7 @@ export default function AdminTicketPage() {
                   <option value="pending">🟡 Pending</option>
                   <option value="in_progress">🔵 In Progress</option>
                   <option value="completed">✅ Completed</option>
+                  <option value="cancelled">🚫 Cancelled</option>
                 </select>
               </div>
 

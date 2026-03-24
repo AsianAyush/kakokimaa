@@ -9,6 +9,7 @@ export default function Navbar() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [prevUnread, setPrevUnread] = useState(0);
   const [cartCount, setCartCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
@@ -50,15 +51,12 @@ export default function Navbar() {
     fetchUser();
     refreshCart();
 
-    // Polling for unread messages
     const poll = setInterval(fetchUser, 10000);
 
-    // Request notification permission once logged in
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
 
-    // Listen for cart changes
     const onStorage = (e: StorageEvent) => { if (e.key === 'ff_cart') refreshCart(); };
     window.addEventListener('storage', onStorage);
     window.addEventListener('ff_cart_update', refreshCart);
@@ -69,53 +67,77 @@ export default function Navbar() {
     };
   }, [refreshCart, fetchUser]);
 
-  // Re-check on route changes
   useEffect(() => {
     refreshCart();
     fetchUser();
+    setMenuOpen(false); // close drawer on route change
   }, [pathname, refreshCart, fetchUser]);
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     setUser(null);
+    setMenuOpen(false);
     router.push('/');
     router.refresh();
   }
 
   if (pathname.startsWith('/admin')) return null;
 
+  const navLinks = (
+    <>
+      <Link href="/" className={`nav-link${pathname === '/' ? ' active' : ''}`} onClick={() => setMenuOpen(false)}>Services</Link>
+      <Link href="/contact" className={`nav-link${pathname === '/contact' ? ' active' : ''}`} onClick={() => setMenuOpen(false)}>Contact</Link>
+      <Link href="/terms" className={`nav-link${pathname === '/terms' ? ' active' : ''}`} onClick={() => setMenuOpen(false)}>Terms</Link>
+      <Link href="/cart" className="nav-cart-btn" onClick={() => setMenuOpen(false)}>
+        🛒 Cart
+        {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
+      </Link>
+      {user ? (
+        <>
+          <Link href="/dashboard" className={`nav-link${pathname === '/dashboard' ? ' active' : ''}`} style={{ position: 'relative' }} onClick={() => setMenuOpen(false)}>
+            {user.role === 'admin' ? 'Admin Dashboard' : 'Your Orders'}
+            {user.unreadCount ? <span className="cart-count" style={{ background: 'var(--danger)', color: 'white', right: -10 }}>{user.unreadCount}</span> : null}
+          </Link>
+          <button onClick={logout} className="btn btn-ghost btn-sm">Logout</button>
+        </>
+      ) : (
+        <>
+          <Link href="/login" className={`nav-link${pathname === '/login' ? ' active' : ''}`} onClick={() => setMenuOpen(false)}>Login</Link>
+          <Link href="/signup" className="btn btn-gold btn-sm" onClick={() => setMenuOpen(false)}>Sign Up</Link>
+        </>
+      )}
+    </>
+  );
+
   return (
     <nav className="navbar">
-      <div className="container">
+      <div className="container" style={{ width: '100%' }}>
+        {/* Main row */}
         <div className="nav-inner">
-          <Link href="/" className="nav-logo">
+          <Link href="/" className="nav-logo" onClick={() => setMenuOpen(false)}>
             <img src="/logo.png" alt="Logo" style={{ width: 48, height: 48, objectFit: 'contain' }} />
             <span style={{ fontSize: '1.3rem' }}>FullFame<span style={{ color: 'var(--gold)' }}> Services</span></span>
           </Link>
 
+          {/* Desktop links */}
           <div className="nav-links">
-            <Link href="/" className={`nav-link${pathname === '/' ? ' active' : ''}`}>Services</Link>
-            <Link href="/contact" className={`nav-link${pathname === '/contact' ? ' active' : ''}`}>Contact</Link>
-            <Link href="/terms" className={`nav-link${pathname === '/terms' ? ' active' : ''}`}>Terms</Link>
-            <Link href="/cart" className="nav-cart-btn">
-              🛒 Cart
-              {cartCount > 0 && <span className="cart-count">{cartCount}</span>}
-            </Link>
-            {user ? (
-              <>
-                <Link href="/dashboard" className={`nav-link${pathname === '/dashboard' ? ' active' : ''}`} style={{ position: 'relative' }}>
-                  {user.role === 'admin' ? 'Admin Dashboard' : 'Your Orders'}
-                  {user.unreadCount ? <span className="cart-count" style={{ background: 'var(--danger)', color: 'white', right: -10 }}>{user.unreadCount}</span> : null}
-                </Link>
-                <button onClick={logout} className="btn btn-ghost btn-sm">Logout</button>
-              </>
-            ) : (
-              <>
-                <Link href="/login" className={`nav-link${pathname === '/login' ? ' active' : ''}`}>Login</Link>
-                <Link href="/signup" className="btn btn-gold btn-sm">Sign Up</Link>
-              </>
-            )}
+            {navLinks}
           </div>
+
+          {/* Hamburger button — mobile only */}
+          <button
+            className="nav-hamburger"
+            onClick={() => setMenuOpen(o => !o)}
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? '✕' : '☰'}
+          </button>
+        </div>
+
+        {/* Mobile drawer */}
+        <div className={`nav-mobile-drawer${menuOpen ? ' open' : ''}`}>
+          {navLinks}
         </div>
       </div>
     </nav>

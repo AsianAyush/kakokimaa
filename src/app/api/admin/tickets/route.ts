@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     pending: all.filter((t: { status: string }) => t.status === 'pending').length,
     in_progress: all.filter((t: { status: string }) => t.status === 'in_progress').length,
     completed: all.filter((t: { status: string }) => t.status === 'completed').length,
+    cancelled: all.filter((t: { status: string }) => t.status === 'cancelled').length,
   };
 
   return NextResponse.json({ tickets: filtered, stats });
