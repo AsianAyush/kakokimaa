@@ -900,12 +900,8 @@ select option { background: var(--bg3); }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
   .service-grid { grid-template-columns: repeat(2, 1fr); }
   .hero { padding: 48px 0 36px; }
-  .hero-title { font-size: clamp(1.8rem, 6vw, 2.5rem); }
+  .hero-title { font-size: clamp(1.4rem, 6vw, 2.5rem); }
   .hero-tagline { font-size: 1rem; }
-  .typewriter-line1,
-  .typewriter-line2 { white-space: normal; overflow: visible; border-right: none; width: auto !important; }
-  .typewriter-line1 { animation: slideUpFade 0.8s ease forwards; }
-  .typewriter-line2 { animation: slideUpFade 1.2s ease 0.4s forwards; opacity: 0; }
   .hero-bg-logo { width: 260px; height: 260px; }
   .auth-card { padding: 28px 20px; }
   .modal { padding: 24px 18px; }
@@ -949,3 +945,46 @@ select option { background: var(--bg3); }
 .order-card-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.875rem; }
 .order-card-label { color: var(--muted); }
 .order-card-value { font-weight: 600; }
+
+/* ─── Currency Toggle ──────────────────────────────────── */
+.currency-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg3);
+  border: 1.5px solid var(--border);
+  border-radius: 30px;
+  padding: 4px;
+  gap: 2px;
+}
+
+.currency-toggle-btn {
+  padding: 7px 20px;
+  border-radius: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  letter-spacing: 0.02em;
+}
+
+.currency-toggle-btn.active {
+  background: var(--gold);
+  color: #0d0d0d;
+  box-shadow: 0 2px 10px rgba(245,197,24,0.3);
+}
+
+.currency-toggle-btn:hover:not(.active):not(:disabled) {
+  color: var(--white);
+  background: var(--bg4);
+}
+
+.currency-toggle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Chat bubble whitespace ───────────────────────────── */
+.chat-bubble div { white-space: pre-wrap; }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getAuthUser, getAdminUser } from '@/lib/auth';
+import { sendPushNotification, getAdminUserIds } from '@/lib/notifications';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -61,14 +62,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const db = createServerClient();
   const sender = (admin && reqSender === 'admin') ? 'admin' : 'customer';
 
+  // Fetch ticket info (user_id + ticket owner name) for notifications
+  const { data: ticketInfo } = await db
+    .from('tickets')
+    .select('user_id')
+    .eq('ticket_id', id)
+    .single();
+
   // Verify ownership for customers
   if (sender === 'customer' && user) {
-    const { data: ticket } = await db
-      .from('tickets')
-      .select('user_id')
-      .eq('ticket_id', id)
-      .single();
-    if (!ticket || ticket.user_id !== user.userId) {
+    if (!ticketInfo || ticketInfo.user_id !== user.userId) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }
@@ -88,6 +91,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await db.from('tickets').update({ has_unread_user: true }).eq('ticket_id', id);
   } else {
     await db.from('tickets').update({ has_unread_admin: true }).eq('ticket_id', id);
+  }
+
+  // Send push notifications
+  const baseUrl = req.nextUrl.origin;
+
+  if (sender === 'customer' && ticketInfo) {
+    // Notify admin about new customer message
+    const adminIds = await getAdminUserIds(db);
+    const senderName = user?.name || 'Customer';
+    if (adminIds.length > 0) {
+      await sendPushNotification({
+        userIds: adminIds,
+        title: '💬 New Message',
+        body: `New message from ${senderName} in ticket ${id}`,
+        url: `/admin/ticket/${id}`,
+        baseUrl,
+      });
+    }
+  } else if (sender === 'admin' && ticketInfo) {
+    // Notify ticket owner (customer) about admin reply
+    await sendPushNotification({
+      userIds: [ticketInfo.user_id],
+      title: '📩 FullFame replied',
+      body: `FullFame replied to your order ${id}`,
+      url: `/ticket/${id}`,
+      baseUrl,
+    });
   }
 
   return NextResponse.json({ message: msg });

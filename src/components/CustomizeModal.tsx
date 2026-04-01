@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { CATEGORIES, SERVICES, estimatePrice, CartItem } from '@/lib/services-data';
+import { CATEGORIES, SERVICES, CATEGORY_LIMITS, estimatePrice, CartItem } from '@/lib/services-data';
 
 interface Props {
   service: { serviceId: string; name: string; category: string; qty: number; price: number } | null;
@@ -15,21 +15,28 @@ export default function CustomizeModal({ service, onClose, onAdd }: Props) {
   const [note, setNote] = useState('');
 
   const category = isCustomOrder ? selectedCategory : service!.category;
-  const minQty = isCustomOrder
-    ? (SERVICES.find(s => s.category === category)?.qty || 100)
-    : service!.qty;
+  const limits = CATEGORY_LIMITS[category] || { min: 1, max: 1000000 };
 
   const qty = Number(qtyStr) || 0;
-  const estimated = estimatePrice(category, qty);
+  const isInRange = qty >= limits.min && qty <= limits.max && qty > 0;
+  const estimated = isInRange ? estimatePrice(category, qty) : 0;
+
+  let validationError = '';
+  if (qtyStr !== '' && qty > 0) {
+    if (qty < limits.min) validationError = `⚠️ Minimum order for ${category} is ${limits.min.toLocaleString('en-IN')}`;
+    else if (qty > limits.max) validationError = `⚠️ Maximum order for ${category} is ${limits.max.toLocaleString('en-IN')}`;
+  }
 
   function handleAdd() {
+    if (!isInRange) return;
+    const finalName = isCustomOrder ? `Custom: ${category}` : `Custom: ${service!.name}`;
     const item: CartItem = {
       id: `custom-${Date.now()}`,
       serviceId: isCustomOrder ? `custom-${category}` : service!.serviceId,
-      name: isCustomOrder ? `Custom: ${category}` : `Custom: ${service!.name}`,
+      name: category === 'Views' ? finalName.replace('Custom:', 'Custom Reel Views:') : finalName,
       category,
-      qty: Math.max(minQty, qty),
-      price: isCustomOrder ? 0 : estimated,
+      qty,
+      price: estimated,
       note: note || undefined,
       isCustom: true,
     };
@@ -50,7 +57,7 @@ export default function CustomizeModal({ service, onClose, onAdd }: Props) {
           {isCustomOrder && (
             <div className="form-group">
               <label className="form-label">Service Type</label>
-              <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setQtyStr('100'); }}>
+              <select value={selectedCategory} onChange={e => { setSelectedCategory(e.target.value); setQtyStr(String(CATEGORY_LIMITS[e.target.value]?.min || 100)); }}>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -66,16 +73,23 @@ export default function CustomizeModal({ service, onClose, onAdd }: Props) {
             <label className="form-label">Quantity</label>
             <input
               type="number"
-              min={minQty}
-              step={10}
+              min={limits.min}
+              max={limits.max}
+              step={1}
               value={qtyStr}
               onChange={e => setQtyStr(e.target.value)}
               onBlur={() => {
                 const val = Number(qtyStr);
-                if (val < minQty) setQtyStr(String(minQty));
+                if (val < limits.min && val > 0) setQtyStr(String(limits.min));
               }}
+              style={validationError ? { borderColor: 'var(--danger)' } : {}}
             />
-            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Minimum: {minQty.toLocaleString('en-IN')}</span>
+            <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+              Minimum: {limits.min.toLocaleString('en-IN')} — Maximum: {limits.max.toLocaleString('en-IN')}
+            </span>
+            {validationError && (
+              <span style={{ fontSize: '0.82rem', color: 'var(--danger)', marginTop: 4, display: 'block' }}>{validationError}</span>
+            )}
           </div>
 
           <div className="price-estimate">
@@ -83,7 +97,10 @@ export default function CustomizeModal({ service, onClose, onAdd }: Props) {
               <div className="price-estimate-label">Estimated Price</div>
               <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Based on nearest package tier</div>
             </div>
-            <div className="price-estimate-value">₹{estimated.toLocaleString('en-IN')}</div>
+            {isInRange
+              ? <div className="price-estimate-value">₹{estimated.toLocaleString('en-IN')}</div>
+              : <div style={{ fontSize: '0.85rem', color: 'var(--muted)', fontStyle: 'italic' }}>Enter a valid quantity to see price</div>
+            }
           </div>
 
           <div className="form-group">
@@ -97,7 +114,7 @@ export default function CustomizeModal({ service, onClose, onAdd }: Props) {
             />
           </div>
 
-          <button className="btn btn-gold btn-full" onClick={handleAdd}>
+          <button className="btn btn-gold btn-full" onClick={handleAdd} disabled={!isInRange}>
             Add Custom Order to Cart 🛒
           </button>
         </div>

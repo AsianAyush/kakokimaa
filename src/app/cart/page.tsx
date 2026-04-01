@@ -2,20 +2,31 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { CartItem } from '@/lib/services-data';
+import { CartItem, CATEGORY_LIMITS } from '@/lib/services-data';
 
 interface UserInfo { name: string; email: string; }
 interface IgProfile { username: string; full_name: string; profile_pic_url: string; is_verified: boolean; }
+
+const LINK_CATEGORIES = new Set(['Views', 'Likes', 'Shares', 'Reposts', 'Saves', 'Custom Comments']);
 
 export default function CartPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [instagram, setInstagram] = useState('');
-  const [likesLink, setLikesLink] = useState('');
-  const [viewsLink, setViewsLink] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // Per-item link state: key = cart item id
+  const [itemLinks, setItemLinks] = useState<Record<string, string>>({});
+  // Comments per cart item id
+  const [itemComments, setItemComments] = useState<Record<string, string>>({});
+
+  // Payment method
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'crypto'>('upi');
+
+  // USDT rate (from localStorage/session)
+  const [usdtRate, setUsdtRate] = useState<number | null>(null);
 
   // Instagram search state
   const [igResults, setIgResults] = useState<IgProfile[]>([]);
@@ -36,9 +47,13 @@ export default function CartPage() {
   useEffect(() => {
     loadCart();
     fetch('/api/auth/me').then(r => r.json()).then(d => { if (d?.user) setUser(d.user); }).catch(() => {});
+    // Fetch usdt rate for display in totals
+    fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=inr')
+      .then(r => r.json())
+      .then(d => { if (d?.tether?.inr) setUsdtRate(d.tether.inr); })
+      .catch(() => {});
   }, [loadCart]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -49,7 +64,6 @@ export default function CartPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Live Instagram search
   function handleIgInput(val: string) {
     setInstagram(val);
     const clean = val.trim().replace('@', '');
@@ -83,32 +97,79 @@ export default function CartPage() {
   }
 
   const total = cart.reduce((sum, i) => sum + i.price, 0);
-  const hasLikes = cart.some(i => i.category === 'Likes');
-  const hasViews = cart.some(i => i.category === 'Views');
+  const usdtTotal = usdtRate ? (total / usdtRate).toFixed(4) : null;
+
+  // Items requiring a link
+  const linkItems = cart.filter(i => LINK_CATEGORIES.has(i.category));
+  const commentItems = cart.filter(i => i.category === 'Custom Comments');
+
+  // Validation helpers
+  function getCommentsCount(text: string) {
+    return text.split('\n').filter(l => l.trim() !== '').length;
+  }
+
+  function validateQuantityLimits(): string | null {
+    for (const item of cart) {
+      const lim = CATEGORY_LIMITS[item.category];
+      if (lim) {
+        if (item.qty < lim.min || item.qty > lim.max) {
+          return `❌ ${item.category} quantity must be between ${lim.min.toLocaleString('en-IN')} and ${lim.max.toLocaleString('en-IN')}. Please update your cart.`;
+        }
+      }
+    }
+    return null;
+  }
 
   async function checkout(e: React.FormEvent) {
     e.preventDefault();
     if (!user) { router.push(`/login?redirect=/cart`); return; }
     if (!instagram.trim()) { setError('Please enter your Instagram username'); return; }
     if (cart.length === 0) { setError('Your cart is empty'); return; }
-    if (hasLikes && !likesLink.trim()) { setError('Please enter a Reel/Post link for your Likes order'); return; }
-    if (hasViews && !viewsLink.trim()) { setError('Please enter a Reel/Post link for your Views order'); return; }
+
+    // Validate links
+    for (const item of linkItems) {
+      if (!itemLinks[item.id]?.trim()) {
+        setError(`Please enter a Reel/Post link for your "${item.name}" order`);
+        return;
+      }
+    }
+
+    // Validate comments
+    for (const item of commentItems) {
+      const text = itemComments[item.id] || '';
+      const count = getCommentsCount(text);
+      if (count !== item.qty) {
+        setError(`Please enter exactly ${item.qty} comments (one per line) for your "${item.name}" order. You have entered ${count}.`);
+        return;
+      }
+    }
+
+    // Validate quantity limits
+    const qtyError = validateQuantityLimits();
+    if (qtyError) { setError(qtyError); return; }
+
     setLoading(true); setError('');
     try {
+      // Attach links and comments to items
+      const enrichedItems = cart.map(item => ({
+        ...item,
+        targetLink: LINK_CATEGORIES.has(item.category) ? (itemLinks[item.id]?.trim() || undefined) : undefined,
+        commentsText: item.category === 'Custom Comments' ? (itemComments[item.id]?.trim() || undefined) : undefined,
+      }));
+
       const res = await fetch('/api/tickets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           instagram_username: instagram.trim().replace('@', ''),
-          items: cart,
+          items: enrichedItems,
           total_price: total,
-          likes_link: likesLink.trim() || undefined,
-          views_link: viewsLink.trim() || undefined,
+          payment_method: paymentMethod,
+          usdt_total: usdtTotal,
         }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to place order'); return; }
-      // Clear cart
       localStorage.setItem('ff_cart', '[]');
       window.dispatchEvent(new Event('ff_cart_update'));
       setCart([]);
@@ -176,7 +237,9 @@ export default function CartPage() {
                   {cart.map(item => (
                     <tr key={item.id}>
                       <td>
-                        <div style={{ fontWeight: 600, color: 'var(--white)' }}>{item.name}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--white)' }}>
+                          {item.category === 'Views' && !item.name.toLowerCase().includes('reel') ? `Reel Views — ${item.name}` : item.name}
+                        </div>
                         <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{item.category}{item.note ? ` · ${item.note}` : ''}</div>
                       </td>
                       <td style={{ color: 'var(--muted)' }}>{item.qty.toLocaleString('en-IN')}</td>
@@ -193,7 +256,7 @@ export default function CartPage() {
             {/* Order form + total */}
             <form onSubmit={checkout}>
               <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                {/* Instagram username with live search */}
+                {/* Instagram username */}
                 <div className="form-group" style={{ position: 'relative' }} ref={dropdownRef}>
                   <label className="form-label">Instagram Username <span style={{ color: 'var(--gold)' }}>*</span></label>
                   <div style={{ position: 'relative' }}>
@@ -213,7 +276,6 @@ export default function CartPage() {
                     )}
                   </div>
 
-                  {/* Search results dropdown */}
                   {showDropdown && igResults.length > 0 && (
                     <div style={{
                       position: 'absolute',
@@ -268,39 +330,114 @@ export default function CartPage() {
                   )}
                 </div>
 
-                {hasLikes && (
-                  <div className="form-group">
-                    <label className="form-label">Reel/Post Link for Likes <span style={{ color: 'var(--gold)' }}>*</span></label>
+                {/* Per-item link inputs */}
+                {linkItems.map(item => (
+                  <div key={`link-${item.id}`} className="form-group">
+                    <label className="form-label">
+                      {item.category === 'Views' ? 'Reel Link' : 'Reel / Post Link'} for &quot;{item.name}&quot; <span style={{ color: 'var(--gold)' }}>*</span>
+                    </label>
                     <input
                       type="url"
-                      placeholder="https://instagram.com/p/..."
-                      value={likesLink}
-                      onChange={e => setLikesLink(e.target.value)}
+                      placeholder={item.category === 'Views' ? 'https://instagram.com/reel/...' : 'https://instagram.com/reel/... or /p/...'}
+                      value={itemLinks[item.id] || ''}
+                      onChange={e => setItemLinks(prev => ({ ...prev, [item.id]: e.target.value }))}
                       required
                     />
-                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Reminder: We need this link to deliver your likes!</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                      {item.category === 'Views' ? '🎬 Views are for Reels only.' : ''}
+                    </span>
                   </div>
-                )}
+                ))}
 
-                {hasViews && (
-                  <div className="form-group">
-                    <label className="form-label">Reel/Post Link for Views <span style={{ color: 'var(--gold)' }}>*</span></label>
-                    <input
-                      type="url"
-                      placeholder="https://instagram.com/reel/..."
-                      value={viewsLink}
-                      onChange={e => setViewsLink(e.target.value)}
-                      required
-                    />
-                    <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Reminder: We need this link to deliver your views!</span>
-                  </div>
-                )}
+                {/* Custom Comments inputs */}
+                {commentItems.map(item => {
+                  const text = itemComments[item.id] || '';
+                  const count = getCommentsCount(text);
+                  const isExact = count === item.qty;
+                  return (
+                    <div key={`comments-${item.id}`} className="form-group">
+                      <label className="form-label">
+                        💬 Comments for &quot;{item.name}&quot; <span style={{ color: 'var(--gold)' }}>*</span>
+                      </label>
+                      <textarea
+                        rows={8}
+                        placeholder={`Enter your comments — one comment per line\nYou need exactly ${item.qty} comments`}
+                        value={text}
+                        onChange={e => setItemComments(prev => ({ ...prev, [item.id]: e.target.value }))}
+                        style={{ resize: 'vertical', fontFamily: 'monospace', fontSize: '0.85rem', borderColor: text && !isExact ? 'var(--danger)' : undefined }}
+                        required
+                      />
+                      <span style={{ fontSize: '0.8rem', color: isExact ? 'var(--success, #4ade80)' : text ? 'var(--danger)' : 'var(--muted)', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>{count} / {item.qty} comments entered</span>
+                        {!isExact && text && <span>Please enter exactly {item.qty} comments</span>}
+                      </span>
+                    </div>
+                  );
+                })}
 
                 <div className="divider" style={{ margin: '4px 0' }} />
 
+                {/* Payment Method Selection */}
+                <div>
+                  <div className="form-label" style={{ marginBottom: 12, fontSize: '1rem', color: 'var(--white)', fontWeight: 600 }}>💳 Payment Method</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    {/* UPI */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('upi')}
+                      style={{
+                        padding: '16px',
+                        borderRadius: 'var(--radius)',
+                        border: `2px solid ${paymentMethod === 'upi' ? 'var(--gold)' : 'var(--border)'}`,
+                        background: paymentMethod === 'upi' ? 'rgba(212,175,55,0.08)' : 'var(--bg3)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--white)', marginBottom: 4 }}>🇮🇳 Pay via UPI</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: 10 }}>GPay, PhonePe, Paytm, any UPI app</div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {['GPay', 'PhonePe', 'Paytm', 'BHIM'].map(app => (
+                          <span key={app} style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 20, background: 'var(--bg4)', color: 'var(--muted)', border: '1px solid var(--border)' }}>{app}</span>
+                        ))}
+                      </div>
+                    </button>
+                    {/* Crypto */}
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('crypto')}
+                      style={{
+                        padding: '16px',
+                        borderRadius: 'var(--radius)',
+                        border: `2px solid ${paymentMethod === 'crypto' ? 'var(--gold)' : 'var(--border)'}`,
+                        background: paymentMethod === 'crypto' ? 'rgba(212,175,55,0.08)' : 'var(--bg3)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--white)', marginBottom: 4 }}>₿ Pay via Crypto</div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--muted)', marginBottom: 10 }}>USDT BEP20 (Binance Smart Chain)</div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 20, background: 'rgba(39,174,96,0.15)', color: '#27ae60', border: '1px solid rgba(39,174,96,0.3)' }}>₮ USDT</span>
+                        <span style={{ fontSize: '0.72rem', padding: '2px 8px', borderRadius: 20, background: 'rgba(243,186,47,0.15)', color: '#f3ba2f', border: '1px solid rgba(243,186,47,0.3)' }}>BEP20</span>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="divider" style={{ margin: '4px 0' }} />
+
+                {/* Total */}
                 <div className="cart-total">
                   <span className="cart-total-label">Order Total</span>
-                  <span className="cart-total-value">₹{total.toLocaleString('en-IN')}</span>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className="cart-total-value">₹{total.toLocaleString('en-IN')}</span>
+                    {paymentMethod === 'crypto' && usdtTotal && (
+                      <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: 2 }}>≈ {usdtTotal} USDT (BEP20)</div>
+                    )}
+                  </div>
                 </div>
 
                 {error && <div className="form-error">⚠ {error}</div>}
@@ -310,7 +447,9 @@ export default function CartPage() {
                 </button>
 
                 <p style={{ fontSize: '0.8rem', color: 'var(--muted)', textAlign: 'center' }}>
-                  💬 After ordering, we&apos;ll send payment details via your support ticket.
+                  {paymentMethod === 'upi'
+                    ? '💳 After ordering, pay via UPI to asianayush@fam and share the screenshot.'
+                    : '₮ After ordering, send USDT (BEP20) to the provided address and share the TxHash.'}
                 </p>
               </div>
             </form>

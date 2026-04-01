@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 interface UserInfo { id: number; name: string; email: string; }
 interface Ticket {
@@ -25,6 +26,43 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge-${status}`}>{s.emoji} {s.label}</span>;
 }
 
+function NotificationBanner({ onEnable, onDismiss }: { onEnable: () => void; onDismiss: () => void }) {
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))',
+      border: '1px solid rgba(212,175,55,0.3)',
+      borderRadius: 12,
+      padding: '14px 18px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      flexWrap: 'wrap',
+      marginBottom: 20,
+    }}>
+      <span style={{ fontSize: '0.9rem', color: 'var(--text)' }}>
+        🔔 Enable notifications to get instant updates on your orders.
+      </span>
+      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+        <button
+          id="btn-enable-notifications"
+          className="btn btn-gold btn-sm"
+          onClick={onEnable}
+        >
+          Enable Notifications
+        </button>
+        <button
+          id="btn-dismiss-notifications"
+          className="btn btn-ghost btn-sm"
+          onClick={onDismiss}
+        >
+          Maybe Later
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -34,6 +72,7 @@ export default function DashboardPage() {
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [pwMsg, setPwMsg] = useState('');
   const router = useRouter();
+  const { permission, showBanner, subscribe, dismissBanner } = usePushNotifications();
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -95,6 +134,26 @@ export default function DashboardPage() {
           <h1 className="dashboard-name">Welcome back, <span>{user?.name?.split(' ')[0] || 'there'}</span>!</h1>
           <p style={{ color: 'var(--muted)', marginTop: 6 }}>{user?.email}</p>
         </div>
+
+        {/* Notification Banner */}
+        {showBanner && (
+          <NotificationBanner onEnable={subscribe} onDismiss={dismissBanner} />
+        )}
+
+        {/* Notification blocked note */}
+        {permission === 'denied' && (
+          <div style={{
+            background: 'rgba(239,68,68,0.08)',
+            border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 10,
+            padding: '10px 16px',
+            fontSize: '0.85rem',
+            color: 'var(--muted)',
+            marginBottom: 20,
+          }}>
+            🔕 Notifications are blocked. Enable them in your browser settings to get order updates.
+          </div>
+        )}
 
         <div className="grid-2" style={{ gap: 32, alignItems: 'flex-start' }}>
           {/* Profile card */}

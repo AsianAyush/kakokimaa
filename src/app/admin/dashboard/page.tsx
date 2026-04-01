@@ -105,41 +105,75 @@ export default function AdminDashboardPage() {
             />
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
-            {loading && tickets.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
-            ) : tickets.length === 0 ? (
-              <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No tickets found.</div>
-            ) : (
-              <table className="tickets-table">
-                <thead>
-                  <tr>
-                    <th>Ticket ID</th>
-                    <th>Customer</th>
-                    <th>Instagram</th>
-                    <th>Total</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.map(t => (
-                    <tr key={t.ticket_id} onClick={() => router.push(`/admin/ticket/${t.ticket_id}`)}>
-                      <td className="ticket-id-cell">#{t.ticket_id}</td>
-                      <td>
-                        <div style={{ fontWeight: 600 }}>{t.users?.name || 'Unknown'}</div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{t.users?.email}</div>
-                      </td>
-                      <td style={{ color: 'var(--info)' }}>@{t.instagram_username}</td>
-                      <td><strong style={{ color: 'var(--gold)', fontFamily: 'Poppins', fontWeight: 700 }}>₹{t.total_price}</strong></td>
-                      <td><StatusBadge status={t.status} /></td>
-                      <td style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>{new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+          {loading && tickets.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center' }}><span className="spinner" /></div>
+          ) : tickets.length === 0 ? (
+            <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No tickets found.</div>
+          ) : (
+            <>
+              {/* Desktop Table View */}
+              <div className="orders-table-wrap" style={{ overflowX: 'auto' }}>
+                <table className="tickets-table">
+                  <thead>
+                    <tr>
+                      <th>Ticket ID</th>
+                      <th>Customer</th>
+                      <th>Instagram</th>
+                      <th>Total</th>
+                      <th>Status</th>
+                      <th>Date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+                  </thead>
+                  <tbody>
+                    {tickets.map(t => (
+                      <tr key={t.ticket_id} onClick={() => router.push(`/admin/ticket/${t.ticket_id}`)}>
+                        <td className="ticket-id-cell">#{t.ticket_id}</td>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{t.users?.name || 'Unknown'}</div>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{t.users?.email}</div>
+                        </td>
+                        <td style={{ color: 'var(--info)' }}>@{t.instagram_username}</td>
+                        <td><strong style={{ color: 'var(--gold)', fontFamily: 'Poppins', fontWeight: 700 }}>₹{t.total_price}</strong></td>
+                        <td><StatusBadge status={t.status} /></td>
+                        <td style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>{new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Card View */}
+              <div className="orders-card-list">
+                {tickets.map(t => (
+                  <div key={t.ticket_id} className="order-card" onClick={() => router.push(`/admin/ticket/${t.ticket_id}`)}>
+                    <div className="order-card-header">
+                      <span className="order-card-id">#{t.ticket_id}</span>
+                      <StatusBadge status={t.status} />
+                    </div>
+                    <div className="order-card-row">
+                      <span className="order-card-label">Customer</span>
+                      <span className="order-card-value" style={{ textAlign: 'right' }}>
+                        <div>{t.users?.name || 'Unknown'}</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--muted)' }}>{t.users?.email}</div>
+                      </span>
+                    </div>
+                    <div className="order-card-row">
+                      <span className="order-card-label">Instagram</span>
+                      <span className="order-card-value" style={{ color: 'var(--info)' }}>@{t.instagram_username}</span>
+                    </div>
+                    <div className="order-card-row">
+                      <span className="order-card-label">Total</span>
+                      <span className="order-card-value" style={{ color: 'var(--gold)' }}>₹{t.total_price}</span>
+                    </div>
+                    <div className="order-card-row">
+                      <span className="order-card-label">Date</span>
+                      <span className="order-card-value">{new Date(t.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

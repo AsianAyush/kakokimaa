@@ -4,7 +4,8 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface Message { id: number; sender: 'customer' | 'admin'; message_text: string | null; image_url: string | null; sent_at: string; }
-interface Ticket { ticket_id: string; instagram_username: string; items: { name: string; qty: number; price: number }[]; total_price: number; status: string; created_at: string; users: { name: string; email: string } | null; }
+interface TicketItem { name: string; qty: number; price: number; category?: string; targetLink?: string; commentsText?: string; }
+interface Ticket { ticket_id: string; instagram_username: string; items: TicketItem[]; total_price: number; status: string; created_at: string; payment_method?: string; users: { name: string; email: string } | null; }
 
 export default function AdminTicketPage() {
   const { id } = useParams<{ id: string }>();
@@ -119,12 +120,42 @@ export default function AdminTicketPage() {
             </div>
 
             <div className="card">
-              <h3 style={{ fontFamily: 'Poppins', fontSize: '1rem', marginBottom: 14 }}>🛒 Order summary</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <h3 style={{ fontFamily: 'Poppins', fontSize: '1rem', margin: 0 }}>🛒 Order summary</h3>
+                {ticket.payment_method && (
+                  <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: 20, background: ticket.payment_method === 'crypto' ? 'rgba(39,174,96,0.15)' : 'rgba(212,175,55,0.15)', color: ticket.payment_method === 'crypto' ? '#27ae60' : 'var(--gold)', border: `1px solid ${ticket.payment_method === 'crypto' ? 'rgba(39,174,96,0.4)' : 'rgba(212,175,55,0.4)'}`, fontWeight: 600 }}>
+                    {ticket.payment_method === 'crypto' ? '₮ Crypto (USDT BEP20)' : '🇮🇳 UPI'}
+                  </span>
+                )}
+              </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                 <tbody>
-                  {(ticket.items as { name: string; qty: number; price: number }[]).map((item, i) => (
+                  {ticket.items.map((item, i) => (
                     <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '10px 0' }}>{item.name}</td>
+                      <td style={{ padding: '10px 0' }}>
+                        <div>{item.name}</div>
+                        {item.targetLink && (
+                          <a href={item.targetLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', color: 'var(--info)', wordBreak: 'break-all', display: 'block', marginTop: 3 }}>
+                            🔗 {item.targetLink}
+                          </a>
+                        )}
+                        {item.commentsText && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const blob = new Blob([item.commentsText!], { type: 'text/plain' });
+                              const a = document.createElement('a');
+                              a.href = URL.createObjectURL(blob);
+                              a.download = `comments-${ticket.ticket_id}-${item.name.replace(/[^a-z0-9]/gi, '_')}.txt`;
+                              a.click();
+                              URL.revokeObjectURL(a.href);
+                            }}
+                            style={{ marginTop: 5, fontSize: '0.72rem', padding: '2px 10px', borderRadius: 20, background: 'rgba(212,175,55,0.12)', color: 'var(--gold)', border: '1px solid var(--gold)', cursor: 'pointer' }}
+                          >
+                            📥 Download Comments (.txt)
+                          </button>
+                        )}
+                      </td>
                       <td style={{ padding: '10px 0', color: 'var(--muted)' }}>{item.qty?.toLocaleString('en-IN')}</td>
                       <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 700, color: 'var(--white)' }}>₹{item.price}</td>
                     </tr>
